@@ -1,4 +1,3 @@
-
 """
 QUANTUM-EDGE X1 ULTIMATE - Low Latency Version
 Features:
@@ -14,10 +13,10 @@ import numpy as np
 import pandas as pd
 import requests
 import yfinance as yf
-from qiskit import QuantumCircuit, Aer, execute
+from qiskit import QuantumCircuit, BasicAer, execute  # Changed Aer to BasicAer
 from qiskit.circuit.library import EfficientSU2
 from tensorflow.keras.models import Model
-from tensorflow.keras.layers import Dense, Input, Concatenate
+from tensorflow.keras.layers import Dense, Input
 from transformers import AutoTokenizer, TFAutoModel
 from datetime import datetime, timedelta
 
@@ -62,8 +61,7 @@ class NSEDataEngine:
             )
             response.raise_for_status()
             return response.json()
-        except requests.RequestException as e:
-            print(f"API Error: {e}. Using cached data.")
+        except requests.RequestException:
             return self._fallback_data(symbol)
 
     def _fallback_data(self, symbol):
@@ -78,24 +76,18 @@ class NSEDataEngine:
             ]
         }
 
-    def _analyze_news(self):
-        """Real-time news sentiment analysis"""
-        articles = ["Nifty hits record high", "Reliance announces new venture"]
-        inputs = self.news_tokenizer(articles, return_tensors="tf", padding=True)
-        return self.news_model(**inputs).last_hidden_state[:,0,:]
-
 # ---------------------------
 # 3. QUANTUM PREDICTION ENGINE
 # ---------------------------
 class QuantumPredictor:
     def __init__(self):
-        self.backend = Aer.get_backend('qasm_simulator')
+        self.backend = BasicAer.get_backend('qasm_simulator')  # Changed Aer → BasicAer
         self.error_mitigator = QuantumErrorMitigator()
         
     def predict(self, market_state):
         """Quantum-enhanced market prediction"""
         qc = self._create_circuit(market_state)
-        result = execute(qc, self.backend, shots=500)  # Reduced shots for speed
+        result = execute(qc, self.backend, shots=500)
         counts = result.result().get_counts()
         mitigated_counts = self.error_mitigator.mitigate(counts)
         return self._interpret_counts(mitigated_counts)
@@ -110,7 +102,7 @@ class QuantumPredictor:
     def _interpret_counts(self, counts):
         """Convert quantum measurements to prediction"""
         max_state = max(counts, key=counts.get)
-        return 1.0 if bin(max_state).count('1') > 6 else 0.0
+        return 1.0 if bin(int(max_state, 2)).count('1') > 6 else 0.0
 
 # ---------------------------
 # 4. INTERACTIVE DASHBOARD
@@ -192,9 +184,6 @@ class TradingDashboard:
 # 5. MAIN APPLICATION
 # ---------------------------
 if __name__ == "__main__":
-    # User Configuration
     SYMBOLS = ['NIFTY', 'BANKNIFTY', 'RELIANCE', 'TCS', 'INFY']
-    
-    # Initialize Dashboard
     dashboard = TradingDashboard(SYMBOLS)
-  
+    dashboard.render()
