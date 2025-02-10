@@ -30,10 +30,6 @@ class QuantumErrorMitigator:
         if input_data.shape[1] != 2:
             input_data = np.pad(input_data, ((0, 0), (0, max(0, 2 - input_data.shape[1]))), mode='constant')
 
-        # Debugging: print input shape
-        print("Counts:", counts)
-        print("Input shape:", input_data.shape)
-
         return self.error_model.predict(input_data)
 
 # ---------------------------
@@ -160,19 +156,20 @@ class TradingDashboard:
 
         # Display Predictions
         df = pd.DataFrame(prediction_data)
-        st.dataframe(df.style.format({
-            'Current Price': '₹{:.2f}',
-            'Prediction': '{:.2%}',
-            'Target': '₹{:.2f}',
-            'Stop Loss': '₹{:.2f}'
-        }), height=300)
+        st.dataframe(df, height=300)
         
     def _get_real_time_prices(self):
         """Fetch real-time prices with error handling"""
         prices = {}
         for symbol in self.symbols:
             try:
-                data = yf.Ticker(symbol + ".NS").history(period='1d')
+                yf_symbol = (
+                    "^NSEI" if symbol == "NIFTY" else
+                    "^NSEBANK" if symbol == "BANKNIFTY" else
+                    symbol + ".NS"
+                )
+
+                data = yf.Ticker(yf_symbol).history(period='1d')
                 prices[symbol] = data['Close'][-1] if not data.empty else 0.0
             except:
                 prices[symbol] = 0.0
@@ -181,23 +178,20 @@ class TradingDashboard:
     def _get_daily_change(self, symbol):
         """Calculate daily percentage change"""
         try:
-            data = yf.Ticker(symbol + ".NS").history(period='2d')
+            yf_symbol = (
+                "^NSEI" if symbol == "NIFTY" else
+                "^NSEBANK" if symbol == "BANKNIFTY" else
+                symbol + ".NS"
+            )
+            data = yf.Ticker(yf_symbol).history(period='2d')
             return f"{((data['Close'][-1] - data['Close'][-2])/data['Close'][-2]*100):.2f}%" if len(data['Close']) >= 2 else "N/A"
         except:
             return "N/A"
-    
-    def _get_market_state(self, symbol):
-        """Get market data for quantum processing"""
-        try:
-            data = yf.Ticker(symbol + ".NS").history(period='1d')
-            return np.array([data['Close'][-1], data['Volume'][-1]]) if not data.empty else np.array([0.0, 0.0])
-        except:
-            return np.array([0.0, 0.0])
 
 # ---------------------------
 # 5. MAIN APPLICATION
 # ---------------------------
 if __name__ == "__main__":
-    SYMBOLS = ['NIFTY_50', 'BANKNIFTY', 'RELIANCE', 'TCS', 'INFY']
+    SYMBOLS = ['NIFTY', 'BANKNIFTY', 'RELIANCE', 'TCS', 'INFY']
     dashboard = TradingDashboard(SYMBOLS)
     dashboard.render()
