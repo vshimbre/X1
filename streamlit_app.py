@@ -26,10 +26,10 @@ class QuantumErrorMitigator:
         self.error_model = self._build_error_network()
         
     def _build_error_network(self):
-        """Neural network for error cancellation"""
-        inputs = Input(shape=(12,))
-        x = Dense(64, activation='relu')(inputs)
-        outputs = Dense(12, activation='sigmoid')(x)
+        """Adjusted for 2-qubit system"""
+        inputs = Input(shape=(2,))  # Changed from 12 to 2
+        x = Dense(32, activation='relu')(inputs)
+        outputs = Dense(2, activation='sigmoid')(x)  # Changed from 12 to 2
         return Model(inputs, outputs)
     
     def mitigate(self, counts):
