@@ -74,6 +74,7 @@ class NSEDataEngine:
 # ---------------------------
 # 3. QUANTUM PREDICTION ENGINE (CIRQ)
 # ---------------------------
+
 class QuantumPredictor:
     def __init__(self):
         self.simulator = cirq.Simulator()
@@ -89,33 +90,34 @@ class QuantumPredictor:
             return self._interpret_counts(mitigated_counts)
         except Exception as e:
             st.error(f"Quantum prediction failed: {str(e)}")
-            return 0.5  # Neutral prediction on error
-    
+            return 0.5  # Fallback to neutral prediction
+
     def _create_circuit(self, market_state):
-        """12-qubit hardware-efficient circuit"""
-        qubits = cirq.LineQubit.range(12)
+        """2-qubit circuit matching market state features"""
+        qubits = cirq.LineQubit.range(2)  # Reduced to 2 qubits
         circuit = cirq.Circuit()
         
-        # State preparation
+        # Use only available market state features
         for i, q in enumerate(qubits):
             circuit.append(cirq.H(q))
-            circuit.append(cirq.ry(market_state[i] * np.pi)(q))
+            if i < len(market_state):
+                circuit.append(cirq.ry(market_state[i] * np.pi)(q))
+            else:
+                circuit.append(cirq.ry(0.0)(q))  # Default value
         
-        # Entanglement
-        for i in range(0, 12, 2):
-            circuit.append(cirq.CZ(qubits[i], qubits[(i + 1) % 12]))
-        
+        # Entanglement pattern for 2 qubits
+        circuit.append(cirq.CZ(qubits[0], qubits[1]))
         circuit.append(cirq.measure(*qubits, key='m'))
         return circuit
     
     def _interpret_counts(self, counts):
-        """Convert quantum measurements to prediction"""
+        """Adjusted interpretation for 2-qubit system"""
         try:
             max_state = max(counts, key=counts.get)
-            return 1.0 if bin(max_state).count('1') > 6 else 0.0
+            # Consider states with majority of 1's (at least 1 out of 2)
+            return 1.0 if bin(max_state).count('1') >= 1 else 0.0
         except:
             return 0.5  # Fallback to neutral prediction
-
 # ---------------------------
 # 4. INTERACTIVE DASHBOARD
 # ---------------------------
