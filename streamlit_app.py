@@ -1,11 +1,11 @@
 """
-QUANTUM-EDGE X1 ULTIMATE - Cirq Version
+QUANTUM-EDGE X1 ULTIMATE - Stable Version
 Features:
 1. Quantum Error Mitigation (DAEM)
 2. Real-Time NSE Data Integration
 3. Interactive Streamlit Dashboard
 4. Multi-Asset Support (NIFTY, BANKNIFTY, Stocks)
-5. Sub-300ms Latency
+5. Robust Error Handling
 """
 
 import streamlit as st
@@ -14,10 +14,8 @@ import pandas as pd
 import requests
 import yfinance as yf
 import cirq
-from cirq.contrib.svg import SVGCircuit
 from tensorflow.keras.models import Model
-from tensorflow.keras.layers import Dense, Input, Concatenate
-from transformers import AutoTokenizer, TFAutoModel
+from tensorflow.keras.layers import Dense, Input
 from datetime import datetime, timedelta
 
 # ---------------------------
@@ -48,40 +46,30 @@ class NSEDataEngine:
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
             "Accept-Language": "en-US,en;q=0.9",
         })
-        self.news_tokenizer = AutoTokenizer.from_pretrained("google/mobilebert-uncased")
-        self.news_model = TFAutoModel.from_pretrained("google/mobilebert-uncased")
         
     def fetch_option_chain(self, symbol):
         """Fetch NSE option chain with API blocking handling"""
         try:
-            self.session.get("https://www.nseindia.com")  # Refresh cookies
+            self.session.get("https://www.nseindia.com")
             response = self.session.get(
                 f"https://www.nseindia.com/api/option-chain-indices?symbol={symbol}",
-                timeout=2  # Reduced timeout for faster fallback
+                timeout=2
             )
             response.raise_for_status()
             return response.json()
-        except requests.RequestException as e:
-            print(f"API Error: {e}. Using cached data.")
+        except Exception as e:
+            st.warning(f"API Error: Using cached data for {symbol}")
             return self._fallback_data(symbol)
 
     def _fallback_data(self, symbol):
         """Fallback data if API is blocked"""
         return {
             'strikePrices': [22000, 22100, 22200],
-            'expiryDates': ['2025-02-15'],
             'data': [
                 {'strikePrice': 22000, 'CE': {'openInterest': 1000, 'impliedVolatility': 15}},
                 {'strikePrice': 22100, 'CE': {'openInterest': 1200, 'impliedVolatility': 16}},
-                {'strikePrice': 22200, 'CE': {'openInterest': 800, 'impliedVolatility': 14}},
             ]
         }
-
-    def _analyze_news(self):
-        """Real-time news sentiment analysis"""
-        articles = ["Nifty hits record high", "Reliance announces new venture"]
-        inputs = self.news_tokenizer(articles, return_tensors="tf", padding=True)
-        return self.news_model(**inputs).last_hidden_state[:,0,:]
 
 # ---------------------------
 # 3. QUANTUM PREDICTION ENGINE (CIRQ)
@@ -93,14 +81,18 @@ class QuantumPredictor:
         
     def predict(self, market_state):
         """Quantum-enhanced market prediction"""
-        qc = self._create_circuit(market_state)
-        result = self.simulator.run(qc, repetitions=500)  # Reduced repetitions for speed
-        counts = result.histogram(key='m')  # Measurement results
-        mitigated_counts = self.error_mitigator.mitigate(counts)
-        return self._interpret_counts(mitigated_counts)
+        try:
+            qc = self._create_circuit(market_state)
+            result = self.simulator.run(qc, repetitions=500)
+            counts = result.histogram(key='m')
+            mitigated_counts = self.error_mitigator.mitigate(counts)
+            return self._interpret_counts(mitigated_counts)
+        except Exception as e:
+            st.error(f"Quantum prediction failed: {str(e)}")
+            return 0.5  # Neutral prediction on error
     
     def _create_circuit(self, market_state):
-        """12-qubit hardware-efficient circuit using Cirq"""
+        """12-qubit hardware-efficient circuit"""
         qubits = cirq.LineQubit.range(12)
         circuit = cirq.Circuit()
         
@@ -113,14 +105,16 @@ class QuantumPredictor:
         for i in range(0, 12, 2):
             circuit.append(cirq.CZ(qubits[i], qubits[(i + 1) % 12]))
         
-        # Measurement
         circuit.append(cirq.measure(*qubits, key='m'))
         return circuit
     
     def _interpret_counts(self, counts):
         """Convert quantum measurements to prediction"""
-        max_state = max(counts, key=counts.get)
-        return 1.0 if bin(max_state).count('1') > 6 else 0.0
+        try:
+            max_state = max(counts, key=counts.get)
+            return 1.0 if bin(max_state).count('1') > 6 else 0.0
+        except:
+            return 0.5  # Fallback to neutral prediction
 
 # ---------------------------
 # 4. INTERACTIVE DASHBOARD
@@ -142,7 +136,7 @@ class TradingDashboard:
         for idx, symbol in enumerate(self.symbols):
             cols[idx].metric(
                 f"{symbol} Price", 
-                f"₹{prices[symbol]:.2f}",
+                f"₹{prices.get(symbol, 0.0):.2f}",
                 self._get_daily_change(symbol)
             )
         
@@ -150,15 +144,25 @@ class TradingDashboard:
         st.header("Quantum Predictions")
         prediction_data = []
         for symbol in self.symbols:
-            market_state = self._get_market_state(symbol)
-            prediction = self.predictor.predict(market_state)
-            prediction_data.append({
-                'Symbol': symbol,
-                'Current Price': prices[symbol],
-                'Prediction': prediction,
-                'Target': prices[symbol] * (1 + prediction/10),
-                'Stop Loss': prices[symbol] * (1 - (1-prediction)/8)
-            })
+            try:
+                market_state = self._get_market_state(symbol)
+                prediction = self.predictor.predict(market_state)
+                prediction_data.append({
+                    'Symbol': symbol,
+                    'Current Price': prices.get(symbol, 0.0),
+                    'Prediction': prediction,
+                    'Target': prices.get(symbol, 0.0) * (1 + prediction/10),
+                    'Stop Loss': prices.get(symbol, 0.0) * (1 - (1-prediction)/8)
+                })
+            except Exception as e:
+                st.error(f"Prediction failed for {symbol}: {str(e)}")
+                prediction_data.append({
+                    'Symbol': symbol,
+                    'Current Price': 0.0,
+                    'Prediction': 0.5,
+                    'Target': 0.0,
+                    'Stop Loss': 0.0
+                })
         
         # Display Predictions
         df = pd.DataFrame(prediction_data)
@@ -172,39 +176,48 @@ class TradingDashboard:
             height=300
         )
         
-        # Interactive Charts
-        st.header("Market Analysis")
-        selected_symbol = st.selectbox("Select Asset", self.symbols)
-        self._display_price_chart(selected_symbol)
-        
     def _get_real_time_prices(self):
-        """Fetch real-time prices from Yahoo Finance"""
-        return {symbol: yf.Ticker(symbol + ".NS").history(period='1d')['Close'][-1] for symbol in self.symbols}
+        """Fetch real-time prices with error handling"""
+        prices = {}
+        for symbol in self.symbols:
+            try:
+                data = yf.Ticker(symbol + ".NS").history(period='1d')
+                if not data.empty and len(data['Close']) > 0:
+                    prices[symbol] = data['Close'][-1]
+                else:
+                    prices[symbol] = 0.0
+                    st.warning(f"No data for {symbol}")
+            except Exception as e:
+                st.error(f"Price fetch failed for {symbol}: {str(e)}")
+                prices[symbol] = 0.0
+        return prices
     
     def _get_daily_change(self, symbol):
         """Calculate daily percentage change"""
-        data = yf.Ticker(symbol + ".NS").history(period='2d')
-        return f"{((data['Close'][-1] - data['Close'][-2])/data['Close'][-2]*100):.2f}%"
-    
-    def _display_price_chart(self, symbol):
-        """Interactive price chart with predictions"""
-        data = yf.Ticker(symbol + ".NS").history(period='1mo')
-        st.line_chart(data['Close'])
+        try:
+            data = yf.Ticker(symbol + ".NS").history(period='2d')
+            if not data.empty and len(data['Close']) >= 2:
+                return f"{((data['Close'][-1] - data['Close'][-2])/data['Close'][-2]*100):.2f}%"
+            return "N/A"
+        except Exception as e:
+            st.error(f"Daily change failed for {symbol}: {str(e)}")
+            return "N/A"
     
     def _get_market_state(self, symbol):
         """Get market data for quantum processing"""
-        return np.array([
-            yf.Ticker(symbol + ".NS").history(period='1d')['Close'][-1],
-            yf.Ticker(symbol + ".NS").history(period='1d')['Volume'][-1]
-        ])
+        try:
+            data = yf.Ticker(symbol + ".NS").history(period='1d')
+            if not data.empty and len(data['Close']) > 0:
+                return np.array([data['Close'][-1], data['Volume'][-1]])
+            return np.array([0.0, 0.0])
+        except Exception as e:
+            st.error(f"Market state failed for {symbol}: {str(e)}")
+            return np.array([0.0, 0.0])
 
 # ---------------------------
 # 5. MAIN APPLICATION
 # ---------------------------
 if __name__ == "__main__":
-    # User Configuration
     SYMBOLS = ['NIFTY', 'BANKNIFTY', 'RELIANCE', 'TCS', 'INFY']
-    
-    # Initialize Dashboard
     dashboard = TradingDashboard(SYMBOLS)
     dashboard.render()
