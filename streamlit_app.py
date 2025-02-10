@@ -1,13 +1,3 @@
-"""
-QUANTUM-EDGE X1 ULTIMATE - Cirq Version
-Features:
-1. Quantum Error Mitigation (DAEM)
-2. Real-Time NSE Data Integration
-3. Interactive Streamlit Dashboard
-4. Multi-Asset Support (NIFTY, BANKNIFTY, Stocks)
-5. Robust Error Handling
-"""
-
 import streamlit as st
 import numpy as np
 import pandas as pd
@@ -27,14 +17,24 @@ class QuantumErrorMitigator:
         
     def _build_error_network(self):
         """Neural network for error cancellation"""
-        inputs = Input(shape=(2,))  # Adjusted for 2-qubit system
+        inputs = Input(shape=(2,))  # Expecting 2 features
         x = Dense(32, activation='relu')(inputs)
         outputs = Dense(2, activation='sigmoid')(x)
         return Model(inputs, outputs)
-    
+
     def mitigate(self, counts):
         """Apply error mitigation to quantum results"""
-        return self.error_model.predict(np.array([list(counts.values())]))
+        input_data = np.array([list(counts.values())])
+        
+        # Ensure input has exactly 2 features (pad if necessary)
+        if input_data.shape[1] != 2:
+            input_data = np.pad(input_data, ((0, 0), (0, max(0, 2 - input_data.shape[1]))), mode='constant')
+
+        # Debugging: print input shape
+        print("Counts:", counts)
+        print("Input shape:", input_data.shape)
+
+        return self.error_model.predict(input_data)
 
 # ---------------------------
 # 2. REAL-TIME NSE DATA INTEGRATION
@@ -43,7 +43,7 @@ class NSEDataEngine:
     def __init__(self):
         self.session = requests.Session()
         self.session.headers.update({
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "User-Agent": "Mozilla/5.0",
             "Accept-Language": "en-US,en;q=0.9",
         })
         
@@ -57,7 +57,7 @@ class NSEDataEngine:
             )
             response.raise_for_status()
             return response.json()
-        except Exception as e:
+        except:
             st.warning(f"API Error: Using cached data for {symbol}")
             return self._fallback_data(symbol)
 
@@ -93,7 +93,7 @@ class QuantumPredictor:
     
     def _create_circuit(self, market_state):
         """2-qubit hardware-efficient circuit"""
-        qubits = cirq.LineQubit.range(2)  # Reduced to 2 qubits
+        qubits = cirq.LineQubit.range(2)
         circuit = cirq.Circuit()
         
         # State preparation
@@ -112,7 +112,7 @@ class QuantumPredictor:
     def _interpret_counts(self, counts):
         """Convert quantum measurements to prediction"""
         try:
-            max_state = max(counts, key=counts.get)
+            max_state = max(counts, key=counts.get, default=0)
             return 1.0 if bin(max_state).count('1') >= 1 else 0.0
         except:
             return 0.5  # Fallback to neutral prediction
@@ -155,27 +155,17 @@ class TradingDashboard:
                     'Target': prices.get(symbol, 0.0) * (1 + prediction/10),
                     'Stop Loss': prices.get(symbol, 0.0) * (1 - (1-prediction)/8)
                 })
-            except Exception as e:
-                st.error(f"Prediction failed for {symbol}: {str(e)}")
-                prediction_data.append({
-                    'Symbol': symbol,
-                    'Current Price': 0.0,
-                    'Prediction': 0.5,
-                    'Target': 0.0,
-                    'Stop Loss': 0.0
-                })
-        
+            except:
+                prediction_data.append({'Symbol': symbol, 'Prediction': 0.5})
+
         # Display Predictions
         df = pd.DataFrame(prediction_data)
-        st.dataframe(
-            df.style.format({
-                'Current Price': '₹{:.2f}',
-                'Prediction': '{:.2%}',
-                'Target': '₹{:.2f}',
-                'Stop Loss': '₹{:.2f}'
-            }),
-            height=300
-        )
+        st.dataframe(df.style.format({
+            'Current Price': '₹{:.2f}',
+            'Prediction': '{:.2%}',
+            'Target': '₹{:.2f}',
+            'Stop Loss': '₹{:.2f}'
+        }), height=300)
         
     def _get_real_time_prices(self):
         """Fetch real-time prices with error handling"""
@@ -183,13 +173,8 @@ class TradingDashboard:
         for symbol in self.symbols:
             try:
                 data = yf.Ticker(symbol + ".NS").history(period='1d')
-                if not data.empty and len(data['Close']) > 0:
-                    prices[symbol] = data['Close'][-1]
-                else:
-                    prices[symbol] = 0.0
-                    st.warning(f"No data for {symbol}")
-            except Exception as e:
-                st.error(f"Price fetch failed for {symbol}: {str(e)}")
+                prices[symbol] = data['Close'][-1] if not data.empty else 0.0
+            except:
                 prices[symbol] = 0.0
         return prices
     
@@ -197,22 +182,16 @@ class TradingDashboard:
         """Calculate daily percentage change"""
         try:
             data = yf.Ticker(symbol + ".NS").history(period='2d')
-            if not data.empty and len(data['Close']) >= 2:
-                return f"{((data['Close'][-1] - data['Close'][-2])/data['Close'][-2]*100):.2f}%"
-            return "N/A"
-        except Exception as e:
-            st.error(f"Daily change failed for {symbol}: {str(e)}")
+            return f"{((data['Close'][-1] - data['Close'][-2])/data['Close'][-2]*100):.2f}%" if len(data['Close']) >= 2 else "N/A"
+        except:
             return "N/A"
     
     def _get_market_state(self, symbol):
         """Get market data for quantum processing"""
         try:
             data = yf.Ticker(symbol + ".NS").history(period='1d')
-            if not data.empty and len(data['Close']) > 0:
-                return np.array([data['Close'][-1], data['Volume'][-1]])
-            return np.array([0.0, 0.0])
-        except Exception as e:
-            st.error(f"Market state failed for {symbol}: {str(e)}")
+            return np.array([data['Close'][-1], data['Volume'][-1]]) if not data.empty else np.array([0.0, 0.0])
+        except:
             return np.array([0.0, 0.0])
 
 # ---------------------------
