@@ -198,6 +198,6 @@ class TradingDashboard:
 # 5. MAIN APPLICATION
 # ---------------------------
 if __name__ == "__main__":
-    SYMBOLS = ['NIFTY', 'BANKNIFTY', 'RELIANCE', 'TCS', 'INFY']
+    SYMBOLS = ['NIFTY_50', 'BANKNIFTY', 'RELIANCE', 'TCS', 'INFY']
     dashboard = TradingDashboard(SYMBOLS)
     dashboard.render()
