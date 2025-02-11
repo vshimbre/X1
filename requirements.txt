@@ -9,4 +9,3 @@ nsepython
 newspaper3k
 scikit-learn
 matplotlib
-ta-lib
