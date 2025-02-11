@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 import yfinance as yf
 import cirq
+import requests
 from tensorflow.keras.models import Model
 from tensorflow.keras.layers import Dense, Input
 
@@ -68,7 +69,29 @@ class QuantumPredictor:
             return 0.5  # Fallback to neutral prediction
 
 # ---------------------------
-# 3. INTERACTIVE DASHBOARD
+# 3. NSE DATA FETCHING (NIFTY & BANKNIFTY)
+# ---------------------------
+def get_nse_index_price(index_name):
+    """Fetch real-time price of NIFTY and BANKNIFTY from NSE India"""
+    url = f"https://www.nseindia.com/api/option-chain-indices?symbol={index_name}"
+    headers = {
+        "User-Agent": "Mozilla/5.0",
+        "Accept": "application/json"
+    }
+    
+    session = requests.Session()
+    session.get("https://www.nseindia.com", headers=headers)  # Bypass bot protection
+    response = session.get(url, headers=headers)
+    
+    if response.status_code == 200:
+        data = response.json()
+        if "records" in data and "underlyingValue" in data["records"]:
+            return data["records"]["underlyingValue"]
+    
+    return None  # If data fetching fails
+
+# ---------------------------
+# 4. INTERACTIVE DASHBOARD
 # ---------------------------
 class TradingDashboard:
     def __init__(self, symbols):
@@ -128,22 +151,35 @@ class TradingDashboard:
         )
 
     def _get_real_time_prices(self):
-        """Fetch real-time prices with correct index mapping"""
+        """Fetch real-time prices from NSE for indices and Yahoo Finance for stocks"""
         prices = {}
-        symbol_map = {"NIFTY": "^NSEI", "BANKNIFTY": "^NSEBANK"}
 
+        # Fetch NIFTY & BANKNIFTY from NSE
+        for index in ["NIFTY", "BANKNIFTY"]:
+            try:
+                price = get_nse_index_price(index)
+                if price:
+                    prices[index] = price
+                else:
+                    st.warning(f"NSE data unavailable for {index}")
+            except Exception as e:
+                st.error(f"Failed to fetch {index} from NSE: {str(e)}")
+                prices[index] = 0.0
+
+        # Fetch stocks from Yahoo Finance
         for symbol in self.symbols:
-            yf_symbol = symbol_map.get(symbol, symbol + ".NS")  # Map indexes
+            if symbol in ["NIFTY", "BANKNIFTY"]:
+                continue  # Skip, already fetched from NSE
 
             try:
-                data = yf.Ticker(yf_symbol).history(period='1d')
-                if not data.empty and "Close" in data.columns:
+                data = yf.Ticker(symbol + ".NS").history(period="1d")
+                if not data.empty:
                     prices[symbol] = data["Close"].iloc[-1]
                 else:
+                    st.warning(f"No Yahoo data for {symbol}")
                     prices[symbol] = 0.0
-                    st.warning(f"No data found for {symbol}")
             except Exception as e:
-                st.error(f"Failed to fetch price for {symbol}: {str(e)}")
+                st.error(f"Failed to fetch {symbol} from Yahoo: {str(e)}")
                 prices[symbol] = 0.0
 
         return prices
@@ -151,10 +187,7 @@ class TradingDashboard:
     def _get_daily_change(self, symbol):
         """Calculate daily price change"""
         try:
-            symbol_map = {"NIFTY": "^NSEI", "BANKNIFTY": "^NSEBANK"}
-            yf_symbol = symbol_map.get(symbol, symbol + ".NS")
-
-            data = yf.Ticker(yf_symbol).history(period='2d')
+            data = yf.Ticker(symbol + ".NS").history(period='2d')
             if len(data) >= 2:
                 return f"{((data['Close'].iloc[-1] - data['Close'].iloc[-2]) / data['Close'].iloc[-2] * 100):.2f}%"
             return "N/A"
@@ -162,22 +195,8 @@ class TradingDashboard:
             st.error(f"Daily change failed for {symbol}: {str(e)}")
             return "N/A"
 
-    def _get_market_state(self, symbol):
-        """Fetch market data for quantum processing"""
-        try:
-            symbol_map = {"NIFTY": "^NSEI", "BANKNIFTY": "^NSEBANK"}
-            yf_symbol = symbol_map.get(symbol, symbol + ".NS")
-
-            data = yf.Ticker(yf_symbol).history(period='1d')
-            if len(data) > 0:
-                return np.array([data['Close'].iloc[-1], data['Volume'].iloc[-1]])
-            return np.array([0.0, 0.0])
-        except Exception as e:
-            st.error(f"Market state fetch failed for {symbol}: {str(e)}")
-            return np.array([0.0, 0.0])
-
 # ---------------------------
-# 4. MAIN APPLICATION
+# 5. MAIN APPLICATION
 # ---------------------------
 if __name__ == "__main__":
     SYMBOLS = ["NIFTY", "BANKNIFTY", "RELIANCE", "TCS", "INFY"]
