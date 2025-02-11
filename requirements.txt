@@ -9,4 +9,4 @@ nsepython
 newspaper3k
 scikit-learn
 matplotlib
-tensorflow==2.10.0
+tensorflow==2.15.0
