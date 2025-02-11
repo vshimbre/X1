@@ -8,4 +8,6 @@ prophet
 scikit-learn
 nsepython
 matplotlib
-talib
+TA-Lib
+plotly
+seaborn
