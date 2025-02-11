@@ -11,7 +11,6 @@ from newspaper import Article
 from datetime import datetime, timedelta
 from sklearn.preprocessing import MinMaxScaler
 import matplotlib.pyplot as plt
-import talib
 
 # ---------------------------
 # 1. Real-Time Data Fetching
@@ -37,24 +36,34 @@ def fetch_option_chain():
 # 2. Option Greeks Calculation
 # ---------------------------
 def calculate_option_greeks(calls, puts):
-    """Calculate Delta, Gamma, Theta, and Vega (simplified)"""
+    """Calculate Delta (simplified)"""
     total_oi = calls['openInterest'] + puts['openInterest']
     calls['Delta'] = calls['openInterest'] / total_oi
     puts['Delta'] = -puts['openInterest'] / total_oi
     return calls, puts
 
 # ---------------------------
-# 3. Candlestick Pattern Recognition
+# 3. Candlestick Pattern Recognition (Without TA-Lib)
 # ---------------------------
 def detect_candlestick_patterns(data):
-    """Detect common candlestick patterns using TA-Lib"""
-    patterns = {
-        'DOJI': talib.CDLDOJI(data['Open'], data['High'], data['Low'], data['Close']),
-        'ENGULFING': talib.CDLENGULFING(data['Open'], data['High'], data['Low'], data['Close']),
-        'HAMMER': talib.CDLHAMMER(data['Open'], data['High'], data['Low'], data['Close'])
-    }
-    detected = {pattern: patterns[pattern].iloc[-1] for pattern in patterns}
-    return detected
+    """Detect Doji and Engulfing patterns manually"""
+
+    # Doji: Open and Close are very close
+    threshold = 0.005  # 0.5% of total range
+    body_size = abs(data['Close'] - data['Open'])
+    total_range = data['High'] - data['Low']
+    data['DOJI'] = (body_size / total_range) < threshold
+
+    # Engulfing: Compare previous and current candle
+    prev_open = data['Open'].shift(1)
+    prev_close = data['Close'].shift(1)
+
+    bullish = (data['Open'] < data['Close']) & (data['Open'] < prev_close) & (data['Close'] > prev_open)
+    bearish = (data['Open'] > data['Close']) & (data['Open'] > prev_close) & (data['Close'] < prev_open)
+
+    data['ENGULFING'] = bullish.astype(int) - bearish.astype(int)
+
+    return {'DOJI': data['DOJI'].iloc[-1], 'ENGULFING': data['ENGULFING'].iloc[-1]}
 
 # ---------------------------
 # 4. Ensemble ML Models
@@ -185,7 +194,6 @@ def main():
     st.pyplot(fig)
 
 def analyze_news_sentiment():
-    """Analyze news sentiment from Economic Times"""
     try:
         article = Article("https://economictimes.indiatimes.com/markets/stocks/news")
         article.download()
