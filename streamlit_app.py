@@ -9,22 +9,29 @@ from tensorflow.keras.layers import Dense, Input
 
 # ---------------------------
 # 1. QUANTUM ERROR MITIGATION (DAEM)
-# ---------------------------
-class QuantumErrorMitigator:
+# class QuantumErrorMitigator:
     def __init__(self):
         self.error_model = self._build_error_network()
 
     def _build_error_network(self):
         """Lightweight neural network for error cancellation"""
-        inputs = Input(shape=(2,))
+        inputs = Input(shape=(2,))  # Expecting a 2-feature input
         x = Dense(16, activation='relu')(inputs)
         outputs = Dense(2, activation='sigmoid')(x)
         return Model(inputs, outputs)
 
     def mitigate(self, counts):
         """Apply error mitigation to quantum results"""
-        return self.error_model.predict(np.array([list(counts.values())]))
+        values = list(counts.values())
 
+        # Ensure exactly 2 values are passed (pad/truncate if necessary)
+        if len(values) < 2:
+            values += [0] * (2 - len(values))  # Pad with zeros if less than 2
+        elif len(values) > 2:
+            values = values[:2]  # Truncate to 2 values
+        
+        input_array = np.array([values])  # Convert to proper shape (1, 2)
+        return self.error_model.predict(input_array)
 # ---------------------------
 # 2. QUANTUM PREDICTION ENGINE (CIRQ)
 # ---------------------------
