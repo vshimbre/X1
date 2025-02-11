@@ -2,7 +2,6 @@ streamlit
 pandas
 numpy
 yfinance
-tensorflow
 xgboost
 prophet
 scikit-learn
@@ -11,3 +10,4 @@ matplotlib
 pandas_ta
 plotly
 seaborn
+tensorflow==2.15.0
