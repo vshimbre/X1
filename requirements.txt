@@ -1,8 +1,12 @@
-streamlit
-numpy
 pandas
-requests
+numpy
 yfinance
-qiskit
+streamlit
 tensorflow
-transformers
+xgboost
+prophet
+nsepython
+newspaper3k
+scikit-learn
+matplotlib
+ta-lib
