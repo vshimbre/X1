@@ -8,6 +8,6 @@ prophet
 scikit-learn
 nsepython
 matplotlib
-TA-Lib
+pandas_ta
 plotly
 seaborn
