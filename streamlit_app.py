@@ -46,7 +46,7 @@ class QuantumPredictor:
             return 0.5  # Fallback to neutral prediction
 
     def _create_circuit(self, market_state):
-        """2-qubit circuit for quantum analysis"""
+        """2-qubit quantum circuit for prediction"""
         qubits = cirq.LineQubit.range(2)
         circuit = cirq.Circuit()
 
@@ -74,20 +74,17 @@ class QuantumPredictor:
 def get_nse_index_price(index_name):
     """Fetch real-time price of NIFTY and BANKNIFTY from NSE India"""
     url = f"https://www.nseindia.com/api/option-chain-indices?symbol={index_name}"
-    headers = {
-        "User-Agent": "Mozilla/5.0",
-        "Accept": "application/json"
-    }
-    
+    headers = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
+
     session = requests.Session()
     session.get("https://www.nseindia.com", headers=headers)  # Bypass bot protection
     response = session.get(url, headers=headers)
-    
+
     if response.status_code == 200:
         data = response.json()
         if "records" in data and "underlyingValue" in data["records"]:
             return data["records"]["underlyingValue"]
-    
+
     return None  # If data fetching fails
 
 # ---------------------------
@@ -119,7 +116,7 @@ class TradingDashboard:
         prediction_data = []
         for symbol in self.symbols:
             try:
-                market_state = self._get_market_state(symbol)
+                market_state = self._get_market_state(symbol, prices)
                 prediction = self.predictor.predict(market_state)
                 prediction_data.append({
                     'Symbol': symbol,
@@ -194,6 +191,20 @@ class TradingDashboard:
         except Exception as e:
             st.error(f"Daily change failed for {symbol}: {str(e)}")
             return "N/A"
+
+    def _get_market_state(self, symbol, prices):
+        """Generate market state for quantum processing"""
+        if symbol in ["NIFTY", "BANKNIFTY"]:
+            return np.array([prices.get(symbol, 0.0), 0])  # NSE indices (No volume data)
+        
+        try:
+            data = yf.Ticker(symbol + ".NS").history(period="1d")
+            if not data.empty:
+                return np.array([data["Close"].iloc[-1], data["Volume"].iloc[-1]])
+        except:
+            pass
+        
+        return np.array([0.0, 0.0])  # Default fallback
 
 # ---------------------------
 # 5. MAIN APPLICATION
