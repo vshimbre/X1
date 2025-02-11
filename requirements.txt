@@ -10,3 +10,4 @@ newspaper3k
 scikit-learn
 matplotlib
 tensorflow==2.15.0
+lxml
