@@ -7,16 +7,15 @@ from tensorflow.keras.layers import LSTM, Dense
 from xgboost import XGBRegressor
 from prophet import Prophet
 from sklearn.ensemble import RandomForestRegressor
-from nsepython import nse_optionchain_scrapper
 from datetime import datetime, timedelta
 from sklearn.preprocessing import MinMaxScaler
 import matplotlib.pyplot as plt
 
 # ---------------------------
-# 1. Multi-Asset Data Fetching
+# 1. Data Fetching
 # ---------------------------
 def fetch_live_data(symbols=["^NSEI", "^NSEBANK"], interval="15m"):
-    """Fetch data for multiple assets"""
+    """Fetch stock/index data"""
     try:
         data = yf.download(tickers=symbols, period="1d", interval=interval, group_by='ticker')
         return data
@@ -25,154 +24,67 @@ def fetch_live_data(symbols=["^NSEI", "^NSEBANK"], interval="15m"):
         return None
 
 def fetch_vix():
-    """Fetch India VIX data"""
+    """Fetch India VIX"""
     try:
         vix = yf.download("^INDIAVIX", period="1d", interval="15m")
-        return vix['Close'].iloc[-1]
+        return round(vix['Close'].iloc[-1], 2)
     except:
-        return None
+        return "Unavailable"
 
 def fetch_option_chain(index="NIFTY"):
-    """Fetch option chain for given index"""
+    """Try fetching NSE option chain via alternative method"""
     try:
-        oc_data = nse_optionchain_scrapper(index)
-        if not oc_data or "CE" not in oc_data or "PE" not in oc_data:
-            return None, None
-        calls = pd.DataFrame(oc_data['CE']['data']) if "CE" in oc_data else None
-        puts = pd.DataFrame(oc_data['PE']['data']) if "PE" in oc_data else None
-        return calls, puts
+        import nsetools
+        nse = nsetools.Nse()
+        options = nse.get_option_chain(index)
+        if options:
+            calls = pd.DataFrame(options['CE'])
+            puts = pd.DataFrame(options['PE'])
+            return calls, puts
     except:
         return None, None
 
 # ---------------------------
-# 2. Machine Learning Models
-# ---------------------------
-def train_lstm(X_train, y_train):
-    """Train LSTM model"""
-    model = Sequential([
-        LSTM(50, return_sequences=True, input_shape=(X_train.shape[1], 1)),
-        LSTM(50),
-        Dense(1)
-    ])
-    model.compile(optimizer='adam', loss='mse')
-    model.fit(X_train, y_train, epochs=10, batch_size=32, verbose=0)
-    return model
-
-def train_xgboost(X_train, y_train):
-    """Train XGBoost model"""
-    model = XGBRegressor(n_estimators=100)
-    model.fit(X_train, y_train)
-    return model
-
-def train_prophet(data):
-    """Train Prophet model"""
-    model = Prophet(daily_seasonality=True)
-    df = data.reset_index().rename(columns={'Date': 'ds', 'Close': 'y'})
-    model.fit(df)
-    return model
-
-def train_random_forest(X_train, y_train):
-    """Train Random Forest model"""
-    model = RandomForestRegressor(n_estimators=100)
-    model.fit(X_train, y_train)
-    return model
-
-# ---------------------------
-# 3. Ensemble Predictions
-# ---------------------------
-def ensemble_predict(asset_data):
-    """Combine predictions from multiple models"""
-    predictions = {}
-    
-    # Prepare data
-    scaler = MinMaxScaler()
-    scaled_data = scaler.fit_transform(asset_data['Close'].values.reshape(-1,1))
-    
-    if len(scaled_data) > 60:
-        X = np.array([scaled_data[i-60:i, 0] for i in range(60, len(scaled_data))])
-        y = scaled_data[60:]
-        
-        # Train models
-        lstm_model = train_lstm(X.reshape(X.shape[0], X.shape[1], 1), y)
-        xgb_model = train_xgboost(X, y)
-        rf_model = train_random_forest(X, y)
-        
-        # Make predictions
-        last_sequence = X[-1].reshape(1, 60, 1)
-        lstm_pred = scaler.inverse_transform(lstm_model.predict(last_sequence))[0][0]
-        xgb_pred = scaler.inverse_transform(xgb_model.predict(X[-1].reshape(1, -1)))[0]
-        rf_pred = scaler.inverse_transform(rf_model.predict(X[-1].reshape(1, -1)))[0]
-        
-        # Weighted average of predictions
-        predictions['ensemble'] = (0.4 * lstm_pred) + (0.3 * xgb_pred) + (0.3 * rf_pred)
-    
-    return predictions
-
-# ---------------------------
-# 4. Streamlit Dashboard
+# 2. Streamlit UI
 # ---------------------------
 def main():
-    st.title("Multi-Asset Advanced Analyzer")
+    st.title("NIFTY & BankNIFTY Analysis")
+
+    asset = st.sidebar.selectbox("Select Asset", ["^NSEI", "^NSEBANK"])
     
-    # User input for assets
-    assets = st.sidebar.text_input("Enter assets (comma-separated)", "^NSEI, ^NSEBANK, RELIANCE.NS").split(',')
-    
-    # Fetch data for all assets
-    all_data = fetch_live_data([a.strip() for a in assets])
+    # Fetch data
+    asset_data = fetch_live_data([asset])
     vix = fetch_vix()
     
-    # Analyze each asset
-    for asset in [a.strip() for a in assets]:
-        st.header(f"{asset} Analysis")
+    if asset_data is not None and not asset_data.empty:
+        st.subheader(f"{asset} Live Data")
+        price = asset_data['Close'].iloc[-1]
         
-        try:
-            # Get asset data
-            asset_data = all_data[asset] if len(assets) > 1 else all_data
-            
-            # Check if data is available
-            if asset_data is None or asset_data.empty:
-                st.warning(f"No data available for {asset}.")
-                continue
+        # **🔹 FIXED: Proper Formatting**
+        col1, col2 = st.columns(2)
+        col1.metric("Current Price", f"₹{price:.2f}")
+        col2.metric("VIX", vix)
+        
+        # Option Chain
+        st.subheader("Option Chain Analysis")
+        calls, puts = fetch_option_chain(asset.replace("^", ""))
+        if calls is not None and puts is not None:
+            st.write("Calls Data (Top 5):")
+            st.dataframe(calls.head())
+            st.write("Puts Data (Top 5):")
+            st.dataframe(puts.head())
+        else:
+            st.warning("Option chain data unavailable.")
 
-            # Perform predictions
-            analysis = ensemble_predict(asset_data)
-            
-            # Display metrics
-            col1, col2, col3 = st.columns(3)
-            col1.metric("Current Price", f"₹{asset_data['Close'].iloc[-1]:.2f}")
-            col2.metric("VIX", f"{vix:.2f}" if asset == "^NSEI" else "N/A")
-
-            # Show predictions
-            if 'ensemble' in analysis:
-                st.subheader("Ensemble Prediction")
-                st.write(f"Next 15-min prediction: ₹{analysis['ensemble']:.2f}")
-            
-            # Option chain for indices
-            if asset in ["^NSEI", "^NSEBANK"]:
-                st.subheader("Option Chain Analysis")
-                calls, puts = fetch_option_chain(asset.replace("^", ""))
-                
-                if calls is not None and puts is not None:
-                    st.write("Top 5 Calls:")
-                    st.dataframe(calls[['strikePrice', 'openInterest', 'lastPrice']].head())
-                    st.write("Top 5 Puts:")
-                    st.dataframe(puts[['strikePrice', 'openInterest', 'lastPrice']].head())
-                else:
-                    st.warning("Option chain data not available.")
-
-            # Visualization
-            st.subheader("Price Chart")
-            if not asset_data.empty:
-                fig, ax = plt.subplots()
-                ax.plot(asset_data.index, asset_data['Close'], label='Price', color='blue')
-                ax.set_title(f"{asset} Price Movement")
-                ax.legend()
-                st.pyplot(fig)
-            else:
-                st.warning("No price data available.")
-
-        except Exception as e:
-            st.error(f"Error analyzing {asset}: {str(e)}")
+        # Chart
+        st.subheader("Price Chart")
+        fig, ax = plt.subplots()
+        ax.plot(asset_data.index, asset_data['Close'], color='blue')
+        ax.set_title(f"{asset} Price Movement")
+        ax.legend()
+        st.pyplot(fig)
+    else:
+        st.warning("No data available.")
 
 if __name__ == "__main__":
     main()
