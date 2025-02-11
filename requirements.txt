@@ -9,5 +9,4 @@ matplotlib
 selenium
 webdriver-manager
 beautifulsoup4
-chromium-chromedriver
-chromium-browser
+
